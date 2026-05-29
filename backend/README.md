@@ -38,7 +38,38 @@ Edit `.env`:
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5-coder:3b
 CHROMA_PERSIST_DIR=./data/chroma
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/ai_code_helper
+JWT_SECRET_KEY=change-me-in-production
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
 DEBUG=True
+```
+
+### 4. Database Migrations
+
+Start PostgreSQL first. With Docker Compose:
+
+```bash
+docker compose up -d postgres
+```
+
+Then run:
+
+```bash
+alembic upgrade head
+```
+
+If you are not using Docker, make sure PostgreSQL is running locally and that this database exists:
+
+```bash
+createdb -U postgres ai_code_helper
+```
+
+The default connection string is:
+
+```text
+postgresql+asyncpg://postgres:postgres@localhost:5433/ai_code_helper
 ```
 
 ## Running
@@ -58,6 +89,36 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 ## API Endpoints
+
+### Auth
+```bash
+POST /auth/register
+POST /auth/login
+POST /auth/refresh
+```
+
+Access tokens expire in 30 minutes. Refresh tokens expire in 7 days.
+
+### Chat Persistence
+```bash
+POST /chat
+POST /chat/messages
+POST /chat/stream
+GET /chat/history?chat_id=...
+```
+
+Use `Authorization: Bearer <access_token>` for chat and project endpoints.
+`/chat/stream` persists the user message immediately, streams the assistant response, then saves the assistant message when streaming completes.
+
+### Project Upload
+```bash
+POST /projects/upload
+Content-Type: multipart/form-data
+
+file=<project.zip>
+```
+
+ZIP files are extracted to a temporary directory, scanned into project metadata, then indexed in a background task.
 
 ### Chat
 ```bash
@@ -183,6 +244,12 @@ backend/
 ### ChromaDB Errors
 - Delete `./data/chroma` and restart to reset the database
 - Ensure write permissions in working directory
+
+### Alembic / PostgreSQL Connection Errors
+- Start the database before running migrations: `docker compose up -d postgres`
+- Docker exposes the project PostgreSQL on host port `5433` to avoid conflicts with local PostgreSQL on `5432`
+- Confirm `DATABASE_URL` in `.env` matches the running database
+- If using a local PostgreSQL install, create the database first: `createdb -U postgres ai_code_helper`
 
 ### Memory Issues
 - Reduce batch size in embeddings_service
